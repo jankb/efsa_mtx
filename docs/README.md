@@ -1,0 +1,102 @@
+# MTX / FoodEx2 katalogutforsker
+
+Åpne **`index.html` direkte i nettleseren** (dobbeltklikk). Ingen server,
+nettforbindelse, installasjon eller byggetrinn er nødvendig for å bruke siden.
+Behold `index.html`, `styles.css`, `app.js`, `catalogue-core.js` og
+`catalogue-data.js` i samme mappe. De kan også legges på et statisk nettsted.
+
+## Funksjoner
+
+- Søk i alle termer: kode, navn, beskrivelse, synonymer, vitenskapelige navn,
+  attributtverdier, hierarkier og navn på implisitte fasetter.
+- Kombiner flere søkeord (alle må finnes), eller bruk `"en hel frase"`.
+  Søket ignorerer store/små bokstaver og aksenter. `/` fokuserer søkefeltet.
+- Filtrer på hierarki/fasett, termtype og utgåtte termer. Eksakte kodetreff
+  prioriteres. Sorter etter relevans, navn eller kode.
+- Se komplette termdetaljer, alternative navn, metadata, rapporterbarhet i
+  hvert hierarki, implisitte fasetter, foreldre og barn. Søk i en hel gren.
+- Tolk grunnkoder, enkeltfasetter (`F01.A04YE`) og kombinerte koder. Lim inn
+  én kode per linje for batch-oppslag. Kombinerte koder i hovedsøket åpner
+  kodetolkeren automatisk.
+- Bygg en kode fra termdetaljene med «Bruk som grunnkode» og «Legg til F…».
+  Fasetter legges til siste kodelinje i kodetolkeren.
+- Fasettoversikt med definisjoner og lenker til tilhørende termer.
+- Kopier koder, tolkninger og direkte termlenker; eksporter alle filtrerte
+  treff eller tolkninger som CSV (semikolon, UTF-8 med BOM).
+
+Grensesnittet er norsk. Katalogtekstene beholdes på originalspråket;
+søk derfor primært på engelske navn eller vitenskapelige navn.
+
+## Eksempler
+
+`A0C60#F02.A069M$F01.A04ZN`
+
+| Del | Katalogbetydning |
+| --- | --- |
+| `A0C60` | Non-food animal-related matrices |
+| `F02.A069M` | Part-nature: Liver (as part-nature) |
+| `F01.A04ZN` | Source: Atlantic halibut (as animal) |
+
+Altså lever fra atlantisk kveite, klassifisert som en ikke-mat-matrise.
+
+`A01QS#F01.A04YE`: Animal fresh meat + Source: Rainbow trout (as animal),
+altså ferskt kjøtt fra regnbueørret.
+
+`#` skiller grunnkode fra fasetter, `.` skiller fasettkode fra termkode,
+og `$` skiller flere fasetter.
+
+## Datagrunnlag og oppdatering
+
+`catalogue-data.js` er generert fra `MTX.xml`. Den inneholder alle termer,
+termtekster, versjonsfelt, hierarkitilknytninger, implisitte attributter,
+hierarkidefinisjoner og attributtdefinisjoner som brukes av visningen.
+Kildens SHA-256 og katalogversjon vises under «Slik bruker du siden».
+
+Ved endring av XML-filen, kjør med Python 3.11 eller nyere:
+
+```sh
+python3 build_catalogue.py
+```
+
+Skriptet bruker bare standardbiblioteket, og standardfilene finnes relativt
+til skriptets plassering. Alternativ kilde og mål kan angis:
+
+```sh
+python3 build_catalogue.py /sti/til/MTX.xml --output catalogue-data.js
+```
+
+Last siden på nytt etter regenerering. En ferdig generert datafil følger med
+slik at Python bare er nødvendig når katalogen oppdateres. Lokale klassiske
+JavaScript-filer brukes i stedet for `fetch()` eller ES-moduler, som ofte
+blokkeres ved `file://`. Ingen eksterne biblioteker, skrifttyper eller
+nettverksforespørsler brukes. Kildelenker åpnes bare når du klikker på dem.
+
+## Tolking og gyldighet
+
+Kodetolkeren kontrollerer syntaks, eksistens av kodedeler og at fasettens term
+tilhører riktig fasetthierarki. Ukjente eller feilplasserte deler gir tydelige
+feil, mens øvrige deler fortsatt forklares. Duplikate fasettdeskriptorer og
+utgåtte termer merkes.
+
+Dette er et katalogoppslag, ikke en full implementasjon av EFSAs FoodEx2-
+valideringsregler. Kombinasjonenes faglige gyldighet, motstridende fasetter,
+rapporteringskrav og kardinalitet valideres ikke. XML-feltene `single` og
+`repeatable` kan avvike fra fasettenes fritekstbeskrivelse; begge vises i
+fasettoversikten uten å utlede en egen regel.
+
+Implisitte fasetter fra `allFacets` (eller `implicitFacets` hvis førstnevnte
+mangler) vises separat. De slås ikke automatisk sammen med eksplisitte
+fasetter. En term merkes utgått når `validTo` er passert (dato, UTC), eller
+status uttrykkelig angir at termen er inaktiv/utgått. Rapporterbarhet vises
+per hierarki slik den er oppgitt i XML-en.
+
+## Tester
+
+Kjernelogikken kan testes mot den genererte katalogen med Node.js 18+:
+
+```sh
+node --test catalogue.test.cjs
+```
+
+Testene omfatter eksempelkoder, feilaktige koder, fasettilhørighet, implisitte
+fasetter, søk, utgåtte termer og hierarkigrenser.

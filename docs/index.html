@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MTX · FoodEx2 katalogutforsker</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="catalogue-data.js"></script>
+  <script defer src="catalogue-core.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Hopp til innhold</a>
+  <header class="site-header">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">M<span>×</span></span><div><strong>MTX <span class="brand-divider">/</span> FoodEx2</strong><span class="brand-subtitle">KATALOGUTFORSKER</span></div></div>
+    <div class="header-meta"><span class="offline"><span aria-hidden="true">●</span> Lokal &amp; offline</span><span id="version">Laster katalog …</span></div>
+  </header>
+  <main id="main">
+    <section class="intro">
+      <div><p class="eyebrow">EFSA · FOODEx2 MATRIX</p><h1>Fra kode til betydning.</h1><p>Søk i termer og fasetter, utforsk hierarkier og forstå sammensatte koder.</p></div>
+      <div id="statistics" class="statistics" aria-label="Katalogstatistikk"></div>
+    </section>
+    <nav class="tabs" aria-label="Verktøy">
+      <button type="button" data-tab="search" aria-current="page">Søk i katalogen</button>
+      <button type="button" data-tab="decode">Tolk koder <span class="tab-symbol">#</span></button>
+      <button type="button" data-tab="facets">Fasettoversikt</button>
+      <button type="button" data-tab="help">Slik bruker du siden</button>
+    </nav>
+    <div id="loading" class="notice" role="status">Klargjør søkeindeks …</div>
+    <noscript><p class="notice error">Aktiver JavaScript for å søke i katalogen. Alt kjøres lokalt i nettleseren.</p></noscript>
+    <section id="panel-search" class="panel" aria-label="Søk i katalogen" hidden>
+      <form id="search-form" class="search-box">
+        <label for="query">Hva leter du etter?</label>
+        <div class="search-input-row"><span aria-hidden="true" class="search-icon">⌕</span><input id="query" type="search" placeholder="Kode, navn, beskrivelse, art eller kombinert kode …" autocomplete="off"><button class="primary" type="submit">Søk</button></div>
+        <div class="search-hint"><span>Søk i originaltekst på engelsk. Flere ord snevrer inn søket; bruk «"…"» for en frase.</span><kbd>/</kbd></div>
+        <div class="examples"><span>Prøv:</span><button type="button" data-query="salmon">salmon</button><button type="button" data-query="Oncorhynchus mykiss">Oncorhynchus mykiss</button><button type="button" data-example="A0C60#F02.A069M$F01.A04ZN">A0C60#F02.A069M$F01.A04ZN <span>↗</span></button><button type="button" data-example="A01QS#F01.A04YE">A01QS#F01.A04YE <span>↗</span></button></div>
+      </form>
+      <div class="filters">
+        <label>Hierarki / fasett<select id="hierarchy"><option value="">Alle hierarkier og fasetter</option></select></label>
+        <label>Termtype<select id="term-type"><option value="">Alle typer</option></select></label>
+        <label>Gyldighet<select id="status"><option value="all">Alle, også utgåtte</option><option value="current">Ikke utgått</option><option value="expired">Kun utgåtte</option></select></label>
+        <button id="reset" class="quiet" type="button">Nullstill</button>
+      </div>
+      <div id="branch-banner" class="notice" hidden></div>
+      <div id="hierarchy-browser" class="hierarchy-browser" hidden></div>
+      <div class="catalogue-layout">
+        <section class="results-section" aria-label="Søkeresultater">
+          <div class="result-toolbar"><strong id="result-count" role="status"></strong><div><label class="sr-only" for="sort">Sortering</label><select id="sort"><option value="relevance">Relevans</option><option value="name">Navn A–Å</option><option value="code">Kode</option></select><button id="export-search" class="quiet" type="button" title="Eksporter alle filtrerte treff">↓ CSV</button></div></div>
+          <div id="results"></div>
+          <div id="pagination" class="pagination"></div>
+        </section>
+        <aside id="term-detail" class="detail-panel" aria-label="Termdetaljer"><div class="detail-placeholder"><span aria-hidden="true">↗</span><h2>Se hele bildet</h2><p>Velg en term for å se beskrivelse, fasetter, attributter og plassering i hierarkiet.</p></div></aside>
+      </div>
+    </section>
+    <section id="panel-decode" class="panel" aria-label="Tolk koder" hidden>
+      <div class="section-heading"><div><p class="eyebrow">KODETOLKER</p><h2>Én kode. Alle delene forklart.</h2><p>Lim inn en grunnkode, en fasett eller flere kombinerte koder – én per linje.</p></div></div>
+      <form id="decode-form" class="decode-form"><label for="decode-input">FoodEx2-koder</label><textarea id="decode-input" rows="4" spellcheck="false" placeholder="A0C60#F02.A069M$F01.A04ZN&#10;A01QS#F01.A04YE"></textarea><div class="action-row"><button class="primary" type="submit">Tolk koder <span aria-hidden="true">→</span></button><button id="decode-examples" type="button">Sett inn eksempler</button><button id="export-decode" class="quiet" type="button" disabled>↓ Eksporter tolkninger</button><span id="decode-count" role="status"></span></div></form>
+      <p class="small muted">Grunnkode <code>#</code> fasett<code>.</code>term <code>$</code> fasett<code>.</code>term. Oppslag og hierarkitilhørighet kontrolleres mot denne katalogen; dette er ikke full EFSA-validering.</p>
+      <div id="decoded-results"></div>
+    </section>
+    <section id="panel-facets" class="panel" aria-label="Fasettoversikt" hidden>
+      <div class="section-heading"><div><p class="eyebrow">BESKRIVENDE EGENSKAPER</p><h2>Finn riktig fasett.</h2><p>Fasetter presiserer blant annet kilde, del, prosess og emballasje.</p></div><div><label for="facet-query">Søk i fasetter</label><input type="search" id="facet-query" placeholder="F01, source, packaging …"></div></div>
+      <div id="facet-list" class="facet-grid"></div>
+    </section>
+    <section id="panel-help" class="panel help-panel" aria-label="Brukerveiledning" hidden>
+      <p class="eyebrow">KORT VEILEDNING</p><h2>En katalog du kan ta med deg.</h2>
+      <div class="help-grid"><article><h3>Søk bredt, filtrer presist</h3><p>Søket omfatter koder, navn, beskrivelser, synonymer, vitenskapelige navn, attributtverdier og navn på implisitte fasetter. Store/små bokstaver og aksenter spiller ingen rolle. Alle søkeord må finnes; en frase i doble anførselstegn søkes samlet.</p><p>Katalogens termer og beskrivelser beholdes på originalspråket. Søk for eksempel på <strong>rainbow trout</strong> eller <strong>Oncorhynchus mykiss</strong>.</p></article>
+      <article><h3>Forstå kombinerte koder</h3><p><code>A01QS#F01.A04YE</code> består av grunnkoden <strong>Animal fresh meat</strong> og kildefasetten <strong>Rainbow trout (as animal)</strong>: ferskt kjøtt fra regnbueørret.</p><p><code>A0C60#F02.A069M$F01.A04ZN</code> beskriver <strong>Non-food animal-related matrices</strong>, med <strong>Liver</strong> som del og <strong>Atlantic halibut</strong> som kilde: lever fra atlantisk kveite i en ikke-mat-matrise.</p></article>
+      <article><h3>Utforsk og sett sammen</h3><p>Velg et hierarki eller en fasett i filteret for å bla fra roten. I termdetaljene kan du følge overordnede og underordnede termer eller avgrense søket til en hel gren.</p><p>«Bruk som grunnkode» starter en kode i kodetolkeren. «Legg til …» føyer til en fasett på siste kodelinje. Du kan gå tilbake til søket for å finne flere fasetter.</p></article>
+      <article><h3>Implisitte fasetter og gyldighet</h3><p>Implisitte fasetter er egenskaper som allerede ligger i katalogtermen. De vises separat fra fasettene du selv oppgir. Det gjøres ingen automatisk sammenslåing eller semantisk konfliktkontroll.</p><p>Utgåtte termer er inkludert som standard og merkes med sluttdato der denne finnes. Rapporterbarhet er hierarkispesifikk og vises i detaljene. Kontroller mot det relevante rapporteringshierarkiet.</p></article>
+      <article><h3>Helt uten server</h3><p>Åpne <code>index.html</code> direkte i nettleseren. Alle data og ressurser ligger i denne mappen. Søk og tolkning krever ingen nettforbindelse. Kun eksterne kildelenker i beskrivelsene åpner nettsteder.</p><p>Ved ny XML-versjon: kjør <code>python3 build_catalogue.py</code> og last siden på nytt. Ingen installasjon av Python-pakker er nødvendig.</p></article>
+      <article><h3>Kopiering og eksport</h3><p>Kopier enkeltkoder, tolkninger eller en lenke til termdetaljer. Lenker peker til samme lokale mappe eller statiske nettsted. Del hele mappen for bruk på en annen maskin.</p><p>CSV-eksport tar med alle filtrerte søkeresultater eller alle tolkede kodelinjer. CSV bruker semikolon og UTF-8 med BOM, egnet for Excel.</p></article></div>
+      <details class="source-info"><summary>Datakilde og versjon</summary><div id="source-info"></div></details>
+    </section>
+    <footer><span>MTX · FoodEx2 Matrix <span id="footer-version"></span></span><span>Originale katalogtekster fra EFSA · behandling lokalt i nettleseren</span></footer>
+  </main>
+  <div id="toast" role="status" class="toast" hidden></div>
+</body>
+</html>
