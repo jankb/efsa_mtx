@@ -19,6 +19,11 @@
       this.hierarchies = [{ code: "MTX", label: "MTX · Hele katalogtreet", hierarchyApplicability: "master", hierarchyOrder: "0" }, ...data.hierarchies]
         .sort((a, b) => Number(a.hierarchyOrder) - Number(b.hierarchyOrder));
       this.hierarchyMap = new Map(this.hierarchies.map(h => [h.code, h]));
+      const unused = (data.catalogue.scopeNote?.match(/\[notUsedHierarchies=([^\]]+)\]/)?.[1] || "").split(/[,;\s]+/);
+      this.reportingHierarchies = this.hierarchies.filter(h => h.hierarchyApplicability === "base" &&
+        !unused.includes(h.code) && !/not a reporting hierarchy/i.test(h.scopeNote || ""));
+      const preferred = data.catalogue.scopeNote?.match(/\[defaultHierarchy=([^\]]+)\]/)?.[1];
+      this.defaultReportingHierarchy = this.reportingHierarchies.find(h => h.code === preferred)?.code || this.reportingHierarchies[0]?.code || "";
       this.children = new Map();
       this.members = new Map();
       this.facetByHierarchy = new Map(this.facets.map(f => [this.facetHierarchy(f), f]));
@@ -141,6 +146,40 @@
       }
       result.summary = [result.base?.name, ...result.facets.map(f => `${f.facet?.label || f.facetCode}: ${f.term?.name || f.termCode}`)].filter(Boolean).join(" · ");
       return result;
+    }
+
+    reportability(decoded, hierarchy = this.defaultReportingHierarchy) {
+      const checks = [];
+      const add = (status, message) => checks.push({ status, message });
+      if (!this.reportingHierarchies.some(h => h.code === hierarchy)) {
+        add("unknown", "Velg et rapporteringshierarki. MTX-hovedtreet og fasetthierarkiene kan ikke brukes som rapporteringshierarki.");
+      }
+      if (decoded.errors.length) add("no", "Koden har syntaksfeil, ukjente kodedeler eller feil fasettilhørighet. Se kodefeilene.");
+      if (!decoded.base) add("no", "Koden mangler en kjent grunnkode. En enkeltfasett kan ikke rapporteres som en fullstendig matrikskode.");
+      const checkTerm = (term, target, label) => {
+        const assignment = this.assignment(term, target);
+        if (!assignment) add("no", `${label} tilhører ikke ${this.hierarchyMap.get(target)?.label || target}.`);
+        else if (assignment.reportable === "false") add("no", `${label} er merket reportable=false i ${target}.`);
+        else if (assignment.reportable === "true") add("yes", `${label} er merket reportable=true i ${target}.`);
+        else add("unknown", `${label} mangler et kjent reportable-flagg i ${target}.`);
+        if (this.expired(term)) add("no", `${label} er utgått${term.version.validTo ? ` (gyldig til ${term.version.validTo.slice(0, 10)})` : ""}.`);
+        if (term.version.validFrom?.slice(0, 10) > new Date().toISOString().slice(0, 10))
+          add("no", `${label} er først gyldig fra ${term.version.validFrom.slice(0, 10)}.`);
+      };
+      if (decoded.base) {
+        checkTerm(decoded.base, hierarchy, `Grunnkode ${decoded.base.code}`);
+        if (decoded.base.type === "f") add("no", "Grunnkoden er en fasett-term, ikke en rapporterbar grunnkode.");
+      }
+      const seen = new Set();
+      for (const row of decoded.facets) {
+        if (row.term && row.facet) checkTerm(row.term, this.facetHierarchy(row.facet), row.raw);
+        if (seen.has(row.facetCode)) add("unknown", `Flere verdier er oppgitt for ${row.facetCode}. Gjentakelse og eventuelle konflikter må vurderes mot FoodEx2-reglene.`);
+        seen.add(row.facetCode);
+      }
+      const status = checks.some(c => c.status === "no") ? "no" : checks.some(c => c.status === "unknown") ? "unknown" : "yes";
+      return { hierarchy, status, checks, label: {
+        yes: "Rapporterbar etter katalogkontroll", no: "Ikke rapporterbar", unknown: "Kan ikke avgjøres med katalogkontrollen"
+      }[status] };
     }
 
     implicit(term) {

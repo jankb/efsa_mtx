@@ -95,6 +95,34 @@ rapporteringskrav og kardinalitet valideres ikke. XML-feltene `single` og
 `repeatable` kan avvike fra fasettenes fritekstbeskrivelse; begge vises i
 fasettoversikten uten å utlede en egen regel.
 
+### Rapporterbarhet i kodetolkeren
+
+Velg rapporteringshierarki under kodefeltet. Standard er katalogens
+`defaultHierarchy=report` (Reporting hierarchy). Hver tolkning viser:
+
+- **Rapporterbar etter katalogkontroll** når grunnkoden finnes og har
+  `reportable=true` i valgt hierarki, alle eksplisitte fasetter har
+  `reportable=true` i sine egne fasetthierarkier, syntaks/tilhørighet er riktig
+  og termdatoene er gyldige i dag (UTC).
+- **Ikke rapporterbar** med årsak ved feil, manglende grunnkode, manglende
+  hierarkitilhørighet, `reportable=false`, utgåtte/ennå ikke gyldige termer
+  eller en fasett-term brukt som grunnkode.
+- **Kan ikke avgjøres med katalogkontrollen** ved manglende flagg eller flere
+  eksplisitte verdier for samme fasett, som krever nærmere regelvurdering.
+
+Kontrollen gjelder kodedelene, ikke en full faglig validering av kombinasjonen.
+Implisitte fasetter, konflikter mellom egenskaper, kardinalitet og krav i en
+bestemt datainnsamling valideres ikke. Alle delkontroller kan vises. Andre
+hierarkier der koden består katalogkontrollen vises som klikkbare alternativer.
+For eksempel består `A01QS#F01.A04YE` i `biomo` (Zoonoses hierarchy), men
+ikke i `report`, fordi grunnkoden ikke finnes der.
+
+Hierarkivelgeren bruker basehierarkier, med unntak av hierarkier merket
+`notUsedHierarchies` og hierarkier hvis beskrivelse uttrykkelig sier at de ikke
+er rapporteringshierarkier. MTX-hovedtreet brukes ikke som rapporteringshierarki.
+Valgt hierarki følger med i historikken og enkeltkodelenker. Rapporterbarhet
+og begrunnelse følger også med ved kopiering og CSV-eksport.
+
 Implisitte fasetter fra `allFacets` (eller `implicitFacets` hvis førstnevnte
 mangler) vises separat. De slås ikke automatisk sammen med eksplisitte
 fasetter. En term merkes utgått når `validTo` er passert (dato, UTC), eller

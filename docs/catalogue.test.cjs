@@ -93,3 +93,41 @@ test('expired terms remain available, can be filtered, and are marked in decodin
   assert.equal(expired.length + current.length, catalogue.data.terms.length);
   assert.ok(catalogue.decode(expired[0].code).warnings.some(w => w.includes('utgått')));
 });
+
+test('reportability depends on the reporting hierarchy, not the master tree', () => {
+  assert.equal(catalogue.defaultReportingHierarchy, 'report');
+  const liver = catalogue.decode('A0C60#F02.A069M$F01.A04ZN');
+  assert.equal(catalogue.reportability(liver).status, 'yes');
+  assert.equal(catalogue.reportability(liver, 'vetdrug').status, 'yes');
+  const trout = catalogue.decode('A01QS#F01.A04YE');
+  assert.equal(catalogue.reportability(trout, 'report').status, 'no');
+  assert.equal(catalogue.reportability(trout, 'biomo').status, 'yes');
+  assert.notEqual(catalogue.reportability(trout, 'MTX').status, 'yes');
+  assert.ok(!catalogue.reportingHierarchies.some(h => ['MTX', 'source', 'pest', 'feedAddExpo'].includes(h.code)));
+});
+
+test('non-reportable flags, malformed codes and standalone facets block reporting', () => {
+  const base = catalogue.reportability(catalogue.decode('A033A'));
+  assert.equal(base.status, 'no');
+  assert.ok(base.checks.some(c => c.message.includes('reportable=false')));
+  const facet = catalogue.reportability(catalogue.decode('A0C60#F01.A053A'));
+  assert.equal(facet.status, 'no');
+  assert.ok(facet.checks.some(c => c.message.includes('F01.A053A') && c.message.includes('reportable=false')));
+  for (const input of ['A0C60#F02.A04YE', 'ZZZZZ', 'A0C60#', 'F01.A04YE', 'A069M']) {
+    assert.equal(catalogue.reportability(catalogue.decode(input)).status, 'no', input);
+  }
+  assert.equal(catalogue.reportability(catalogue.decode('A0C60#F01.A04YE$F01.A04ZN')).status, 'unknown');
+});
+
+test('missing flags and term validity never produce a positive reportability result', () => {
+  const source = catalogue.byCode.get('A04YE');
+  const check = (version, flag) => {
+    const decoded = catalogue.decode('A0C60#F01.A04YE');
+    decoded.facets[0].term = { ...source, version: { ...source.version, ...version },
+      assignments: source.assignments.map(a => a.hierarchyCode === 'source' ? { ...a, reportable: flag } : a) };
+    return catalogue.reportability(decoded);
+  };
+  assert.equal(check({}, undefined).status, 'unknown');
+  assert.equal(check({ validTo: '2000-01-01T00:00:00' }, 'true').status, 'no');
+  assert.equal(check({ validFrom: '2999-01-01T00:00:00' }, 'true').status, 'no');
+});

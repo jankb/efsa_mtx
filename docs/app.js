@@ -68,7 +68,7 @@
     $("history-count").hidden = !recentSearches.length;
     $("clear-history").disabled = !recentSearches.length;
     $("history-list").innerHTML = recentSearches.length ? recentSearches.map((entry, index) => {
-      const filters = entry.kind === "decode" ? [entry.summary || ""] : [
+      const filters = entry.kind === "decode" ? [catalogue.hierarchyMap.get(entry.hierarchy || catalogue.defaultReportingHierarchy)?.label, entry.summary || ""].filter(Boolean) : [
         catalogue.hierarchyMap.get(entry.hierarchy)?.label,
         MTX.typeNames[entry.type],
         { current: "Ikke utgått", expired: "Kun utgåtte" }[entry.status],
@@ -88,6 +88,7 @@
     clearTimeout(historyTimer);
     pendingHistory = null;
     if (entry.kind === "decode") {
+      $("reporting-hierarchy").value = catalogue.reportingHierarchies.some(h => h.code === entry.hierarchy) ? entry.hierarchy : catalogue.defaultReportingHierarchy;
       $("decode-input").value = entry.query;
       decode();
       $("decode-input").focus();
@@ -276,27 +277,45 @@
   function decode(record = true) {
     flushHistory();
     const lines = $("decode-input").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    state.decoded = lines.map(line => catalogue.decode(line));
+    const hierarchy = $("reporting-hierarchy").value;
+    state.decoded = lines.map(line => {
+      const decoded = catalogue.decode(line);
+      decoded.reporting = catalogue.reportability(decoded, hierarchy);
+      return decoded;
+    });
     showTab("decode");
     $("decode-count").textContent = lines.length ? `${number(lines.length)} ${lines.length === 1 ? "kode" : "koder"} tolket` : "";
     $("export-decode").disabled = !lines.length;
-    if (lines.length === 1) setHash("decode", lines[0]);
+    if (lines.length === 1) {
+      const hash = new URLSearchParams({ decode: lines[0], hierarchy });
+      try { history.replaceState(null, "", `#${hash}`); } catch { /* Local file history may be restricted. */ }
+    }
     $("decoded-results").innerHTML = lines.length ? state.decoded.map((d, i) => {
       const parts = [];
       if (d.base) parts.push({ heading: "Grunnkode", code: d.base.code, term: d.base });
       parts.push(...d.facets.map(f => ({ heading: `${f.facetCode} · ${f.facet?.label || "Ukjent fasett"}`, code: f.raw, term: f.term, facet: f.facet })));
       return `<article class="decoded-card"><div class="decoded-heading"><code>${escape(d.code)}</code>${button("Kopier tolkning", "data-copy-decode", i, "quiet")}</div><p class="decoded-summary">${escape(d.summary || "Koden kunne ikke tolkes.")}</p>
+      ${reportabilityHtml(d)}
       ${d.errors.length ? `<div class="notice error"><strong>Problemer med koden</strong><ul>${d.errors.map(e => `<li>${escape(e)}</li>`).join("")}</ul></div>` : '<span class="badge">Alle kodedeler funnet i katalogen</span>'}
       ${d.warnings.length ? `<div class="notice warning">${d.warnings.map(w => `<p>${escape(w)}</p>`).join("")}</div>` : ""}
       <div class="decoded-parts">${parts.map(p => `<section class="part-card"><p class="eyebrow">${escape(p.heading)}</p>${codePill(p.code)}<h3>${p.term ? termLink(p.term) : "Ukjent term"}</h3>${p.term ? `<p>${escape(p.term.note.split("£")[0])}</p>` : ""}${p.facet ? `<details><summary>Hva beskriver denne fasetten?</summary><p>${escape(p.facet.scopeNote)}</p></details>` : ""}</section>`).join("")}</div>
       ${d.base ? `<details><summary>Vis grunnkodens implisitte fasetter (separat fra oppgitt kode)</summary><p class="small muted">Dette er katalogens innebygde egenskaper. De er ikke automatisk slått sammen med dine fasetter.</p>${implicitHtml(d.base)}</details>` : ""}</article>`;
     }).join("") : '<div class="empty-state"><h3>Legg inn en kode for å starte</h3><p>Du kan også bruke eksempelknappen over.</p></div>';
-    if (record && lines.length) remember({ kind: "decode", query: state.decoded.map(d => d.code).join("\n"),
+    if (record && lines.length) remember({ kind: "decode", hierarchy, query: state.decoded.map(d => d.code).join("\n"),
       summary: state.decoded.map(d => d.summary || "Koden kunne ikke tolkes").join(" · ").slice(0, 400) });
   }
 
+  function reportabilityHtml(d) {
+    const r = d.reporting;
+    const reasons = r.checks.filter(c => c.status !== "yes");
+    const alternatives = catalogue.reportingHierarchies.filter(h => h.code !== r.hierarchy && catalogue.reportability(d, h.code).status === "yes");
+    return `<section class="reportability ${r.status}" aria-label="Rapporterbarhet"><h3>${escape(r.label)}</h3><p class="small">${escape(catalogue.hierarchyMap.get(r.hierarchy)?.label || r.hierarchy)} · vurdert mot katalogen per ${new Date().toISOString().slice(0, 10)}</p>${reasons.length ? `<ul>${reasons.map(c => `<li>${escape(c.message)}</li>`).join("")}</ul>` : '<p>Grunnkoden og alle oppgitte fasetter har rapporterbart flagg og gyldige termdatoer i de relevante hierarkiene.</p>'}<details><summary>Vis kontroll av hver kodedel</summary><ul>${r.checks.map(c => `<li>${escape({ yes: "OK", no: "Nei", unknown: "Uavklart" }[c.status])}: ${escape(c.message)}</li>`).join("")}</ul></details>${alternatives.length ? `<p class="reporting-alternatives">Består katalogkontrollen i: ${alternatives.map(h => button(escape(h.label), "data-reporting-hierarchy", h.code)).join(" · ")}</p>` : ""}<p class="small muted">Gjelder katalogkontrollen av kodedelene. Full faglig validering av kombinasjonen og rapporteringskrav er ikke utført.</p></section>`;
+  }
+
   function decodedText(d) {
-    return [d.code, d.summary, ...d.errors.map(e => `FEIL: ${e}`), ...d.warnings.map(w => `MERKNAD: ${w}`)].join("\n");
+    return [d.code, d.summary, `${d.reporting.label} · ${catalogue.hierarchyMap.get(d.reporting.hierarchy)?.label || d.reporting.hierarchy}`,
+      ...d.reporting.checks.map(c => c.message), "Katalogkontroll av kodedeler; ikke full EFSA-validering av kombinasjonen.",
+      ...d.errors.map(e => `FEIL: ${e}`), ...d.warnings.map(w => `MERKNAD: ${w}`)].join("\n");
   }
 
   function renderFacets() {
@@ -331,7 +350,10 @@
   function navigateHash() {
     const params = new URLSearchParams(location.hash.slice(1));
     if (params.has("term")) showTerm(params.get("term").toUpperCase());
-    else if (params.has("decode")) { $("decode-input").value = params.get("decode"); decode(false); }
+    else if (params.has("decode")) {
+      $("reporting-hierarchy").value = catalogue.reportingHierarchies.some(h => h.code === params.get("hierarchy")) ? params.get("hierarchy") : catalogue.defaultReportingHierarchy;
+      $("decode-input").value = params.get("decode"); decode(false);
+    }
     else if (params.has("q")) { $("query").value = params.get("q"); performSearch(true, true, false); }
   }
 
@@ -357,6 +379,7 @@
     }));
     $("reset").addEventListener("click", () => { resetFilters(); $("query").value = ""; $("sort").value = "relevance"; performSearch(); });
     $("decode-form").addEventListener("submit", e => { e.preventDefault(); decode(); });
+    $("reporting-hierarchy").addEventListener("change", () => decode());
     $("decode-examples").addEventListener("click", () => { $("decode-input").value = "A0C60#F02.A069M$F01.A04ZN\nA01QS#F01.A04YE"; decode(); });
     $("facet-query").addEventListener("input", renderFacets);
     $("clear-history").addEventListener("click", () => {
@@ -371,8 +394,9 @@
       ...state.results.map(t => [t.code, t.name, t.note, MTX.typeNames[t.type] || t.type, t.version.status, t.version.validTo, (t.attributes.A01 || []).join(" | "), (t.attributes.A02 || []).join(" | "), t.assignments.map(a => a.hierarchyCode).join(" | "), catalogue.implicit(t).map(f => `${f.raw}: ${f.term?.name || ""}`).join(" | "), JSON.stringify(t.attributes)])
     ]));
     $("export-decode").addEventListener("click", () => downloadCsv("mtx-kodetolkninger.csv", [
-      ["Kode", "Betydning", "Grunnkode", "Grunnkodebeskrivelse", "Fasetter", "Feil", "Merknader"],
-      ...state.decoded.map(d => [d.code, d.summary, d.base?.code, d.base?.name, d.facets.map(f => `${f.raw} (${f.facet?.label || "?"}): ${f.term?.name || "?"}`).join(" | "), d.errors.join(" | "), d.warnings.join(" | ")])
+      ["Kode", "Betydning", "Grunnkode", "Grunnkodebeskrivelse", "Fasetter", "Feil", "Merknader", "Rapporteringshierarki", "Rapporterbarhet (katalogkontroll)", "Begrunnelse", "Kontrollomfang"],
+      ...state.decoded.map(d => [d.code, d.summary, d.base?.code, d.base?.name, d.facets.map(f => `${f.raw} (${f.facet?.label || "?"}): ${f.term?.name || "?"}`).join(" | "), d.errors.join(" | "), d.warnings.join(" | "),
+        d.reporting.hierarchy, d.reporting.label, d.reporting.checks.map(c => c.message).join(" | "), "Kodedeler og gyldighet i dag; ikke full EFSA-validering av kombinasjonen"])
     ]));
     document.addEventListener("click", e => {
       const b = e.target.closest("button");
@@ -384,6 +408,7 @@
         showTab(d.tab);
       }
       if (d.historyOpen !== undefined) openHistory(Number(d.historyOpen));
+      if (d.reportingHierarchy) { $("reporting-hierarchy").value = d.reportingHierarchy; decode(); }
       if (d.historyRemove !== undefined) {
         const index = Number(d.historyRemove);
         recentSearches.splice(index, 1);
@@ -450,6 +475,8 @@
       $("statistics").innerHTML = [[data.terms.length, "termer"], [catalogue.facets.length, "fasetter"], [data.hierarchies.length, "hierarkier"]].map(([n, label]) => `<div class="stat"><strong>${number(n)}</strong><span>${label}</span></div>`).join("");
       $("hierarchy").insertAdjacentHTML("beforeend", catalogue.hierarchies.map(h => `<option value="${escape(h.code)}">${escape(h.label)}</option>`).join(""));
       $("term-type").insertAdjacentHTML("beforeend", Object.entries(MTX.typeNames).map(([key, label]) => `<option value="${key}">${label}</option>`).join(""));
+      $("reporting-hierarchy").innerHTML = catalogue.reportingHierarchies.map(h => `<option value="${escape(h.code)}">${escape(h.label)} (${escape(h.code)})</option>`).join("");
+      $("reporting-hierarchy").value = catalogue.defaultReportingHierarchy;
       $("source-info").innerHTML = `<p>${escape(data.catalogue.label)} · versjon ${escape(data.version.version)} · gyldig fra ${escape(data.version.validFrom)} · ${escape(data.version.status)}</p><p>Kilde: <code>${escape(data.source.file)}</code><br>SHA-256: <code>${escape(data.source.sha256)}</code></p><p>${number(data.terms.length)} termer, ${number(data.attributes.length)} attributtdefinisjoner og ${number(data.hierarchies.length)} hierarkier. MTX-hovedtreet vises i tillegg.</p>`;
       registerEvents();
       loadHistory();
