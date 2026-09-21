@@ -6,10 +6,109 @@
   const number = value => value.toLocaleString("nb-NO");
   const state = { tab: "search", page: 1, results: [], selected: "", branch: "", decoded: [], childLimits: new Map() };
   const pageSize = 40;
+  const historyKey = `mtx.search-history.v1:${location.pathname}`;
+  let recentSearches = [], pendingHistory = null, historyTimer;
   let catalogue, searchTimer, toastTimer;
   const button = (label, attribute, value, className = "term-link") => `<button type="button" class="${className}" ${attribute}="${escape(value)}">${label}</button>`;
   const termLink = term => term ? button(escape(term.name), "data-term", term.code) : "";
   const codePill = code => `<span class="code-pill">${escape(code)}</span>`;
+
+  function searchSnapshot() {
+    return { kind: "search", query: $("query").value.trim(), hierarchy: $("hierarchy").value,
+      type: $("term-type").value, status: $("status").value, branch: state.branch, sort: $("sort").value };
+  }
+
+  function historyIdentity(entry) {
+    return JSON.stringify([entry.kind, MTX.normalize(entry.query), entry.hierarchy || "", entry.type || "",
+      entry.status || "all", entry.branch || "", entry.sort || "relevance"]);
+  }
+
+  function loadHistory() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      if (Array.isArray(saved)) recentSearches = saved.filter(entry => entry &&
+        ["search", "decode"].includes(entry.kind) && typeof entry.query === "string" &&
+        Number.isFinite(entry.time) && !Number.isNaN(new Date(entry.time).getTime()) &&
+        ["hierarchy", "type", "status", "branch", "sort", "summary"].every(key => entry[key] === undefined || typeof entry[key] === "string")
+      ).slice(0, 50);
+    } catch {
+      // An unavailable store or invalid saved JSON must not prevent catalogue use.
+    }
+    persistHistory();
+  }
+
+  function persistHistory() {
+    try {
+      localStorage.setItem(historyKey, JSON.stringify(recentSearches));
+      $("history-storage").textContent = "Lagres lokalt i denne nettleseren, også når du lukker siden.";
+    } catch {
+      $("history-storage").textContent = "Nettleseren tillater ikke lagring av historikken nå. Søkene huskes bare mens denne siden er åpen.";
+    }
+    renderHistory();
+  }
+
+  function remember(entry) {
+    if (entry.kind === "search" && !entry.query && !entry.hierarchy && !entry.type && entry.status === "all" && !entry.branch) return;
+    if (entry.kind === "decode" && !entry.query) return;
+    const identity = historyIdentity(entry);
+    recentSearches = [{ ...entry, time: Date.now() }, ...recentSearches.filter(old => historyIdentity(old) !== identity)].slice(0, 50);
+    persistHistory();
+  }
+
+  function flushHistory() {
+    clearTimeout(historyTimer);
+    if (!pendingHistory) return;
+    const entry = pendingHistory;
+    pendingHistory = null;
+    remember(entry);
+  }
+
+  function renderHistory() {
+    $("history-count").textContent = number(recentSearches.length);
+    $("history-count").hidden = !recentSearches.length;
+    $("clear-history").disabled = !recentSearches.length;
+    $("history-list").innerHTML = recentSearches.length ? recentSearches.map((entry, index) => {
+      const filters = entry.kind === "decode" ? [entry.summary || ""] : [
+        catalogue.hierarchyMap.get(entry.hierarchy)?.label,
+        MTX.typeNames[entry.type],
+        { current: "Ikke utgått", expired: "Kun utgåtte" }[entry.status],
+        entry.branch ? `Gren: ${catalogue.byCode.get(entry.branch)?.name || entry.branch}` : "",
+        { name: "Sortert etter navn", code: "Sortert etter kode" }[entry.sort]
+      ].filter(Boolean);
+      const date = new Date(entry.time);
+      const label = entry.kind === "decode" ? "Kodetolking" : "Katalogsøk";
+      return `<article class="history-card"><button type="button" class="history-open" data-history-open="${index}"><span class="history-meta"><span class="badge">${label}</span><time datetime="${date.toISOString()}">${escape(date.toLocaleString("nb-NO", { dateStyle: "medium", timeStyle: "short" }))}</time></span><strong class="history-query">${escape(entry.query || "Filtrert katalogsøk")}</strong>${filters.length ? `<span class="history-description">${escape(filters.join(" · "))}</span>` : ""}<span class="history-action">Åpne ${entry.kind === "decode" ? "tolkning" : "søk"} →</span></button><button type="button" class="quiet history-remove" data-history-remove="${index}" aria-label="Fjern ${escape(entry.query || "filtrert katalogsøk")} fra historikken">Fjern</button></article>`;
+    }).join("") : '<div class="empty-state"><h3>Ingen søk ennå</h3><p>Søk i katalogen eller tolk en kode, så finner du det igjen her.</p><button type="button" data-tab="search">Søk i katalogen →</button></div>';
+  }
+
+  function openHistory(index) {
+    const entry = recentSearches[index];
+    if (!entry) return;
+    clearTimeout(searchTimer);
+    clearTimeout(historyTimer);
+    pendingHistory = null;
+    if (entry.kind === "decode") {
+      $("decode-input").value = entry.query;
+      decode();
+      $("decode-input").focus();
+      return;
+    }
+    $("query").value = entry.query;
+    $("hierarchy").value = catalogue.hierarchyMap.has(entry.hierarchy) ? entry.hierarchy : "";
+    $("term-type").value = Object.hasOwn(MTX.typeNames, entry.type || "") ? entry.type : "";
+    $("status").value = ["all", "current", "expired"].includes(entry.status) ? entry.status : "all";
+    $("sort").value = ["relevance", "name", "code"].includes(entry.sort) ? entry.sort : "relevance";
+    state.branch = catalogue.members.get($("hierarchy").value)?.has(entry.branch) ? entry.branch : "";
+    state.selected = "";
+    $("term-detail").innerHTML = '<div class="detail-placeholder"><h2>Velg et treff</h2><p>Åpne en term for å se alle detaljene.</p></div>';
+    showTab("search");
+    performSearch();
+    flushHistory();
+    setHash("q", entry.query);
+    const exact = catalogue.byCode.get(entry.query.toUpperCase());
+    if (exact) showTerm(exact.code, false);
+    $("query").focus();
+  }
 
   function toast(message) {
     $("toast").textContent = message;
@@ -87,14 +186,17 @@
     }).join("");
   }
 
-  function performSearch(resetPage = true, interpret = false) {
+  function performSearch(resetPage = true, interpret = false, record = true) {
     clearTimeout(searchTimer);
+    searchTimer = null;
+    clearTimeout(historyTimer);
+    pendingHistory = null;
     const query = $("query").value.trim();
     if (interpret && (query.includes("#") || /^F\d{2}\s*\./i.test(query))) {
       $("decode-input").value = query;
       $("query").value = query.includes("#") ? query.split("#")[0] : "";
-      performSearch();
-      decode();
+      performSearch(true, false, false);
+      decode(record);
       return;
     }
     if (resetPage) state.page = 1;
@@ -104,6 +206,10 @@
     });
     renderResults();
     renderBrowser();
+    if (record) {
+      pendingHistory = searchSnapshot();
+      historyTimer = setTimeout(flushHistory, 1200);
+    }
   }
 
   function renderResults() {
@@ -140,6 +246,8 @@
   }
 
   function showTerm(code, scroll = true) {
+    if (searchTimer) performSearch();
+    flushHistory();
     const term = catalogue.byCode.get(code);
     if (!term) { toast(`Ukjent term: ${code}`); return; }
     state.selected = code;
@@ -165,7 +273,8 @@
     $("term-detail").scrollTop = 0;
   }
 
-  function decode() {
+  function decode(record = true) {
+    flushHistory();
     const lines = $("decode-input").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     state.decoded = lines.map(line => catalogue.decode(line));
     showTab("decode");
@@ -182,6 +291,8 @@
       <div class="decoded-parts">${parts.map(p => `<section class="part-card"><p class="eyebrow">${escape(p.heading)}</p>${codePill(p.code)}<h3>${p.term ? termLink(p.term) : "Ukjent term"}</h3>${p.term ? `<p>${escape(p.term.note.split("£")[0])}</p>` : ""}${p.facet ? `<details><summary>Hva beskriver denne fasetten?</summary><p>${escape(p.facet.scopeNote)}</p></details>` : ""}</section>`).join("")}</div>
       ${d.base ? `<details><summary>Vis grunnkodens implisitte fasetter (separat fra oppgitt kode)</summary><p class="small muted">Dette er katalogens innebygde egenskaper. De er ikke automatisk slått sammen med dine fasetter.</p>${implicitHtml(d.base)}</details>` : ""}</article>`;
     }).join("") : '<div class="empty-state"><h3>Legg inn en kode for å starte</h3><p>Du kan også bruke eksempelknappen over.</p></div>';
+    if (record && lines.length) remember({ kind: "decode", query: state.decoded.map(d => d.code).join("\n"),
+      summary: state.decoded.map(d => d.summary || "Koden kunne ikke tolkes").join(" · ").slice(0, 400) });
   }
 
   function decodedText(d) {
@@ -220,13 +331,14 @@
   function navigateHash() {
     const params = new URLSearchParams(location.hash.slice(1));
     if (params.has("term")) showTerm(params.get("term").toUpperCase());
-    else if (params.has("decode")) { $("decode-input").value = params.get("decode"); decode(); }
-    else if (params.has("q")) { $("query").value = params.get("q"); performSearch(true, true); }
+    else if (params.has("decode")) { $("decode-input").value = params.get("decode"); decode(false); }
+    else if (params.has("q")) { $("query").value = params.get("q"); performSearch(true, true, false); }
   }
 
   function registerEvents() {
     $("search-form").addEventListener("submit", e => {
       e.preventDefault(); performSearch(true, true);
+      flushHistory();
       if (state.tab === "search") {
         const exact = catalogue.byCode.get($("query").value.trim().toUpperCase());
         if (exact) showTerm(exact.code);
@@ -235,6 +347,8 @@
     });
     $("query").addEventListener("input", e => {
       clearTimeout(searchTimer);
+      clearTimeout(historyTimer);
+      pendingHistory = null;
       searchTimer = setTimeout(() => performSearch(true, e.inputType === "insertFromPaste"), 180);
     });
     ["hierarchy", "term-type", "status", "sort"].forEach(id => $(id).addEventListener("change", () => {
@@ -245,6 +359,13 @@
     $("decode-form").addEventListener("submit", e => { e.preventDefault(); decode(); });
     $("decode-examples").addEventListener("click", () => { $("decode-input").value = "A0C60#F02.A069M$F01.A04ZN\nA01QS#F01.A04YE"; decode(); });
     $("facet-query").addEventListener("input", renderFacets);
+    $("clear-history").addEventListener("click", () => {
+      clearTimeout(historyTimer);
+      pendingHistory = null;
+      recentSearches = [];
+      persistHistory();
+      toast("Historikken er tømt");
+    });
     $("export-search").addEventListener("click", () => downloadCsv("mtx-sokeresultater.csv", [
       ["Kode", "Navn", "Beskrivelse", "Type", "Status", "Gyldig til", "Vitenskapelige navn", "Alternative navn", "Hierarkier", "Implisitte fasetter", "Attributter (JSON)"],
       ...state.results.map(t => [t.code, t.name, t.note, MTX.typeNames[t.type] || t.type, t.version.status, t.version.validTo, (t.attributes.A01 || []).join(" | "), (t.attributes.A02 || []).join(" | "), t.assignments.map(a => a.hierarchyCode).join(" | "), catalogue.implicit(t).map(f => `${f.raw}: ${f.term?.name || ""}`).join(" | "), JSON.stringify(t.attributes)])
@@ -257,7 +378,19 @@
       const b = e.target.closest("button");
       if (!b || b.disabled) return;
       const d = b.dataset;
-      if (d.tab) { clearTimeout(searchTimer); showTab(d.tab); }
+      if (d.tab) {
+        if (searchTimer) performSearch();
+        flushHistory();
+        showTab(d.tab);
+      }
+      if (d.historyOpen !== undefined) openHistory(Number(d.historyOpen));
+      if (d.historyRemove !== undefined) {
+        const index = Number(d.historyRemove);
+        recentSearches.splice(index, 1);
+        persistHistory();
+        const next = $("history-list").querySelector(`[data-history-remove="${Math.min(index, recentSearches.length - 1)}"]`);
+        (next || $("history-list").querySelector("button"))?.focus();
+      }
       if (d.term) showTerm(d.term);
       if (d.copy !== undefined) copy(d.copy);
       if (d.copyLink) { const url = new URL(location.href); url.hash = new URLSearchParams({ term: d.copyLink }).toString(); copy(url.href); }
@@ -299,6 +432,12 @@
       }
     });
     window.addEventListener("hashchange", navigateHash);
+    const saveBeforeLeaving = () => {
+      if (searchTimer) performSearch();
+      flushHistory();
+    };
+    window.addEventListener("pagehide", saveBeforeLeaving);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) saveBeforeLeaving(); });
   }
 
   function start() {
@@ -313,7 +452,8 @@
       $("term-type").insertAdjacentHTML("beforeend", Object.entries(MTX.typeNames).map(([key, label]) => `<option value="${key}">${label}</option>`).join(""));
       $("source-info").innerHTML = `<p>${escape(data.catalogue.label)} · versjon ${escape(data.version.version)} · gyldig fra ${escape(data.version.validFrom)} · ${escape(data.version.status)}</p><p>Kilde: <code>${escape(data.source.file)}</code><br>SHA-256: <code>${escape(data.source.sha256)}</code></p><p>${number(data.terms.length)} termer, ${number(data.attributes.length)} attributtdefinisjoner og ${number(data.hierarchies.length)} hierarkier. MTX-hovedtreet vises i tillegg.</p>`;
       registerEvents();
-      performSearch(); renderFacets(); showTab("search");
+      loadHistory();
+      performSearch(true, false, false); renderFacets(); showTab("search");
       $("loading").hidden = true;
       navigateHash();
     } catch (error) {

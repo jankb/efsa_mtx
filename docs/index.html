@@ -23,6 +23,7 @@
     </section>
     <nav class="tabs" aria-label="Verktøy">
       <button type="button" data-tab="search" aria-current="page">Søk i katalogen</button>
+      <button type="button" data-tab="history">Siste søk <span id="history-count" class="tab-symbol" hidden>0</span></button>
       <button type="button" data-tab="decode">Tolk koder <span class="tab-symbol">#</span></button>
       <button type="button" data-tab="facets">Fasettoversikt</button>
       <button type="button" data-tab="help">Slik bruker du siden</button>
@@ -53,6 +54,11 @@
         <aside id="term-detail" class="detail-panel" aria-label="Termdetaljer"><div class="detail-placeholder"><span aria-hidden="true">↗</span><h2>Se hele bildet</h2><p>Velg en term for å se beskrivelse, fasetter, attributter og plassering i hierarkiet.</p></div></aside>
       </div>
     </section>
+    <section id="panel-history" class="panel" aria-label="Siste søk" hidden>
+      <div class="section-heading"><div><p class="eyebrow">FORTSETT DER DU SLAPP</p><h2>Siste søk</h2><p>De 50 siste søkene og kodetolkningene dine. Åpne et søk for å gjenbruke søkeord og filtre.</p></div><button id="clear-history" type="button" class="quiet" disabled>Tøm historikken</button></div>
+      <p id="history-storage" class="small muted">Lagres lokalt i denne nettleseren, også når du lukker siden.</p>
+      <div id="history-list" class="history-list"></div>
+    </section>
     <section id="panel-decode" class="panel" aria-label="Tolk koder" hidden>
       <div class="section-heading"><div><p class="eyebrow">KODETOLKER</p><h2>Én kode. Alle delene forklart.</h2><p>Lim inn en grunnkode, en fasett eller flere kombinerte koder – én per linje.</p></div></div>
       <form id="decode-form" class="decode-form"><label for="decode-input">FoodEx2-koder</label><textarea id="decode-input" rows="4" spellcheck="false" placeholder="A0C60#F02.A069M$F01.A04ZN&#10;A01QS#F01.A04YE"></textarea><div class="action-row"><button class="primary" type="submit">Tolk koder <span aria-hidden="true">→</span></button><button id="decode-examples" type="button">Sett inn eksempler</button><button id="export-decode" class="quiet" type="button" disabled>↓ Eksporter tolkninger</button><span id="decode-count" role="status"></span></div></form>
@@ -71,6 +77,7 @@
       <article><h3>Implisitte fasetter og gyldighet</h3><p>Implisitte fasetter er egenskaper som allerede ligger i katalogtermen. De vises separat fra fasettene du selv oppgir. Det gjøres ingen automatisk sammenslåing eller semantisk konfliktkontroll.</p><p>Utgåtte termer er inkludert som standard og merkes med sluttdato der denne finnes. Rapporterbarhet er hierarkispesifikk og vises i detaljene. Kontroller mot det relevante rapporteringshierarkiet.</p></article>
       <article><h3>Helt uten server</h3><p>Åpne <code>index.html</code> direkte i nettleseren. Alle data og ressurser ligger i denne mappen. Søk og tolkning krever ingen nettforbindelse. Kun eksterne kildelenker i beskrivelsene åpner nettsteder.</p><p>Ved ny XML-versjon: kjør <code>python3 build_catalogue.py</code> og last siden på nytt. Ingen installasjon av Python-pakker er nødvendig.</p></article>
       <article><h3>Kopiering og eksport</h3><p>Kopier enkeltkoder, tolkninger eller en lenke til termdetaljer. Lenker peker til samme lokale mappe eller statiske nettsted. Del hele mappen for bruk på en annen maskin.</p><p>CSV-eksport tar med alle filtrerte søkeresultater eller alle tolkede kodelinjer. CSV bruker semikolon og UTF-8 med BOM, egnet for Excel.</p></article></div>
+      <article class="notice"><h3>Finn tilbake til tidligere søk</h3><p>«Siste søk» husker de 50 siste katalogsøkene og kodetolkningene, inkludert filtre og hierarkigren. Søk lagres når du trykker Søk, velger et treff eller tar en kort pause i skrivingen. Gjentatte søk flyttes øverst. Du kan fjerne enkeltoppføringer eller tømme hele historikken.</p><p>Historikken lagres lokalt i nettleseren med localStorage. Bruk samme nettleser og filplassering for å finne den igjen. Hvis nettleseren blokkerer lagring, huskes søkene bare mens siden er åpen.</p></article>
       <details class="source-info"><summary>Datakilde og versjon</summary><div id="source-info"></div></details>
     </section>
     <footer><span>MTX · FoodEx2 Matrix <span id="footer-version"></span></span><span>Originale katalogtekster fra EFSA · behandling lokalt i nettleseren</span></footer>

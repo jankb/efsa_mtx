@@ -21,11 +21,22 @@ Behold `index.html`, `styles.css`, `app.js`, `catalogue-core.js` og
 - Bygg en kode fra termdetaljene med «Bruk som grunnkode» og «Legg til F…».
   Fasetter legges til siste kodelinje i kodetolkeren.
 - Fasettoversikt med definisjoner og lenker til tilhørende termer.
+- «Siste søk» husker de 50 siste katalogsøkene og kodetolkningene lokalt i
+  nettleseren. Åpne en oppføring for å gjenbruke søkeord, filtre, sortering og
+  hierarkigren, eller hele settet med koder fra en batch-tolkning. Like søk
+  flyttes øverst uten duplikater. Enkeltoppføringer og hele historikken kan slettes.
 - Kopier koder, tolkninger og direkte termlenker; eksporter alle filtrerte
   treff eller tolkninger som CSV (semikolon, UTF-8 med BOM).
 
 Grensesnittet er norsk. Katalogtekstene beholdes på originalspråket;
 søk derfor primært på engelske navn eller vitenskapelige navn.
+
+Historikken lagres automatisk med `localStorage` etter en kort skrivepause,
+ved eksplisitt søk eller når du velger et treff/forlater søket. Den beholdes
+mellom besøk i samme nettleser og filplassering. Privat nettlesing, sletting av
+nettleserdata eller flytting av siden kan gjøre historikken utilgjengelig.
+Hvis lokal lagring er blokkert/full, fungerer historikken for den åpne siden,
+og «Siste søk» viser at den ikke kan lagres permanent.
 
 ## Eksempler
 
